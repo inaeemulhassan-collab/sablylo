@@ -1,0 +1,119 @@
+-- Phase 1 catalog schema. Run using npm run db:migrate --workspace @sablylo/api
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version VARCHAR(120) PRIMARY KEY,
+  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS categories (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  parent_id BIGINT UNSIGNED NULL,
+  name VARCHAR(160) NOT NULL,
+  slug VARCHAR(180) NOT NULL UNIQUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_categories_parent FOREIGN KEY (parent_id) REFERENCES categories(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS products (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(180) NOT NULL UNIQUE,
+  brand VARCHAR(120) NULL,
+  model VARCHAR(150) NULL,
+  description TEXT NULL,
+  specifications JSON NULL,
+  status ENUM('draft','review','published','archived') NOT NULL DEFAULT 'draft',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_products_status_created (status, created_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS product_categories (
+  product_id BIGINT UNSIGNED NOT NULL,
+  category_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (product_id, category_id),
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS product_images (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_id BIGINT UNSIGNED NOT NULL,
+  image_url TEXT NOT NULL,
+  source_url TEXT NULL,
+  position INT UNSIGNED NOT NULL DEFAULT 0,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  INDEX idx_product_images_product (product_id, position)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  website_url VARCHAR(2048) NULL,
+  kind ENUM('own','external') NOT NULL DEFAULT 'external',
+  status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS offers (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_id BIGINT UNSIGNED NOT NULL,
+  supplier_id BIGINT UNSIGNED NOT NULL,
+  price DECIMAL(12,2) NOT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'PKR',
+  url VARCHAR(2048) NULL,
+  checked_at DATETIME NULL,
+  is_own_offer BOOLEAN NOT NULL DEFAULT FALSE,
+  status ENUM('active','inactive') NOT NULL DEFAULT 'inactive',
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+  INDEX idx_offers_product_status_price (product_id, status, price)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS inventory (
+  offer_id BIGINT UNSIGNED PRIMARY KEY,
+  sku VARCHAR(120) NULL UNIQUE,
+  quantity INT UNSIGNED NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS product_sources (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_id BIGINT UNSIGNED NOT NULL,
+  source_url VARCHAR(2048) NOT NULL,
+  notes TEXT NULL,
+  verified_at DATETIME NULL,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  INDEX idx_sources_product (product_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(254) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('admin','editor') NOT NULL DEFAULT 'editor',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  actor_id BIGINT UNSIGNED NULL,
+  action VARCHAR(120) NOT NULL,
+  entity_type VARCHAR(120) NOT NULL,
+  entity_id VARCHAR(120) NULL,
+  details JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (actor_id) REFERENCES admin_users(id) ON DELETE SET NULL,
+  INDEX idx_audit_created (created_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS ai_jobs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  kind VARCHAR(100) NOT NULL,
+  status ENUM('queued','running','review','completed','failed') NOT NULL DEFAULT 'queued',
+  payload JSON NULL,
+  result JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
